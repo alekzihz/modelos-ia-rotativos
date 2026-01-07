@@ -36,9 +36,6 @@ final class GroqService implements IAService
         $apiKey = $apiKey ?? ($_ENV['GROQ_API_KEY'] ?? '');
         $apiKey = is_string($apiKey) ? $apiKey : '';
 
-
-
-
         $this->apiKey = $apiKey;
         $this->baseUrl = rtrim($baseUrl, '/');
 
