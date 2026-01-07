@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace App\Modelos;
@@ -12,13 +13,13 @@ final class IAServiceRotator
     private string $stateFile;
 
     /** @param \App\Modelos\IAService[] $services */
-    public function __construct(array $services, string $stateFile = '/tmp/ai_rr_index.txt')
+    public function __construct(array $services, string $stateFile = 'ai_rr_index.txt')
     {
         if (!$services)
             throw new RuntimeException('No hay servicios registrados.');
         $this->services = array_values($services);
+        $stateFile = sys_get_temp_dir() . DIRECTORY_SEPARATOR . $stateFile;
         $this->stateFile = $stateFile;
-
     }
 
     public function next(): IAService
