@@ -1,0 +1,4 @@
+### DEMO rotator (GET)
+
+GET http://localhost:3004/demo?prompt=Hola%20rotador,%20elige%20modelo%20por%20favor
+Accept: application/json
