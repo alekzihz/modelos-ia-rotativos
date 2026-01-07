@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 // services/GroqService.php
 namespace App\Services;
@@ -34,10 +35,6 @@ final class CerebrasService implements IAService
         $apiKey = $apiKey ?? ($_ENV['CEREBRAS_API_KEY'] ?? '');
         $apiKey = is_string($apiKey) ? $apiKey : '';
 
-        if ($apiKey === '') {
-            throw new RuntimeException('Falta CEREBRAS_API_KEY.');
-        }
-
         $this->apiKey = $apiKey;
         $this->baseUrl = rtrim($baseUrl, '/');
 
@@ -48,6 +45,13 @@ final class CerebrasService implements IAService
         $this->maxTokens = $maxTokens;
         $this->topP = $topP;
         $this->stop = $stop;
+    }
+
+    private function ensureApiKey(): void
+    {
+        if (empty($this->apiKey)) {
+            throw new RuntimeException('La clave API de Cerebras no está configurada.');
+        }
     }
 
     public function name(): string
@@ -61,6 +65,7 @@ final class CerebrasService implements IAService
      */
     public function stream(array $messages, callable $onDelta): void
     {
+        $this->ensureApiKey();
         $this->createStream(
             $messages,
             $this->model,
@@ -236,7 +241,6 @@ final class CerebrasService implements IAService
         $data = json_decode($raw, true);
         if (!is_array($data)) {
             throw new RuntimeException('Respuesta no JSON: ' . substr((string) $raw, 0, 300));
-
         }
         if ($http >= 400) {
             $msg = $data['error']['message'] ?? "HTTP {$http}";

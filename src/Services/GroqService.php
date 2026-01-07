@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 // services/GroqService.php
 namespace App\Services;
@@ -31,12 +32,9 @@ final class GroqService implements IAService
         float $topP = 1.0,
         mixed $stop = null
     ) {
+
         $apiKey = $apiKey ?? ($_ENV['GROQ_API_KEY'] ?? '');
         $apiKey = is_string($apiKey) ? $apiKey : '';
-
-        if ($apiKey === '') {
-            throw new RuntimeException('Falta GROQ_API_KEY.');
-        }
 
         $this->apiKey = $apiKey;
         $this->baseUrl = rtrim($baseUrl, '/');
@@ -50,6 +48,13 @@ final class GroqService implements IAService
         $this->stop = $stop;
     }
 
+    private function ensureApiKey(): void
+    {
+        if (empty($this->apiKey)) {
+            throw new RuntimeException('La clave API de Groq no está configurada.');
+        }
+    }
+
     public function name(): string
     {
         return 'groq';
@@ -61,6 +66,7 @@ final class GroqService implements IAService
      */
     public function stream(array $messages, callable $onDelta): void
     {
+        $this->ensureApiKey();
         $this->createStream(
             $messages,
             $this->model,
@@ -180,6 +186,7 @@ final class GroqService implements IAService
 
         $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
+        echo $http;
 
         if ($http >= 400) {
             throw new RuntimeException("HTTP error en streaming: {$http}");
@@ -236,7 +243,6 @@ final class GroqService implements IAService
         $data = json_decode($raw, true);
         if (!is_array($data)) {
             throw new RuntimeException('Respuesta no JSON: ' . substr((string) $raw, 0, 300));
-
         }
         if ($http >= 400) {
             $msg = $data['error']['message'] ?? "HTTP {$http}";

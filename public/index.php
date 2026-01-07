@@ -1,4 +1,5 @@
 <?php
+
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use Slim\Factory\AppFactory;
@@ -17,7 +18,7 @@ $dotenv->load();
 
 $rotator = new IAServiceRotator([
     new GroqService(),
-    new CerebrasService(),
+    //new CerebrasService(),
     // otros servicios IA aquí...
 ]);
 
@@ -69,7 +70,6 @@ $app->get('/chat', function ($request, $response) {
 
 $app->get('/demo', function ($request, $response) use ($rotator) {
     //$groq = new GroqService();
-
     $peticion = $request->getQueryParams();
 
     if (empty($peticion)) {
@@ -104,23 +104,28 @@ $app->get('/demo', function ($request, $response) use ($rotator) {
         @ob_end_flush();
     }
     ob_implicit_flush(true);
+    try {
 
-    echo "Generando...\n\n";
-    echo "Usando servicio: " . $serviceIa->name() . "\n\n";
-    @flush();
+        echo "Generando...\n\n";
+        echo "Usando servicio: " . $serviceIa->name() . "\n\n";
+        @flush();
 
-    $serviceIa->stream(
-        $messages,
-        function (string $delta) {
-            echo $delta;
-            @flush();
-        }
+        $serviceIa->stream(
+            $messages,
+            function (string $delta) {
+                echo $delta;
+                @flush();
+            }
 
 
-    );
+        );
 
-    echo "\n\n[DONE]\n";
-    @flush();
+        echo "\n\n[DONE]\n";
+        @flush();
+    } catch (Throwable $e) {
+        echo "\n\n[ERROR] " . $e->getMessage() . "\n";
+        @flush();
+    }
 
     return $response;
 });
