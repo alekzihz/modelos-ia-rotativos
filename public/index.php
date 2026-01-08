@@ -5,10 +5,12 @@ use Psr\Http\Message\ServerRequestInterface as Request;
 use Slim\Factory\AppFactory;
 use App\Services\GroqService;
 use App\Services\CerebrasService;
+use App\Services\OpenAIService;
 
 use App\Modelos\ChatMessage;
 use App\Modelos\Role;
 use App\Modelos\IAServiceRotator;
+use App\Excepciones\AIServiceException;
 
 require __DIR__ . '/../vendor/autoload.php';
 
@@ -17,8 +19,9 @@ $dotenv = Dotenv\Dotenv::createImmutable(__DIR__ . '/../');
 $dotenv->load();
 
 $rotator = new IAServiceRotator([
+    new OpenAIService(),
     new GroqService(),
-    //new CerebrasService(),
+    new CerebrasService(),
     // otros servicios IA aquí...
 ]);
 
@@ -123,11 +126,27 @@ $app->get('/demo', function ($request, $response) use ($rotator) {
         echo "\n\n[DONE]\n";
         @flush();
     } catch (Throwable $e) {
-        echo "\n\n[ERROR] " . $e->getMessage() . "\n";
+        if ($e instanceof AIServiceException) {
+            echo "\n\n[ERROR en {$e->provider}] ";
+            echo "Tipo: " . erroresGeneralesServicios($e);
+        } else {
+            echo "\n\n[ERROR] " . $e->getMessage() . "\n";
+        }
         @flush();
     }
+
 
     return $response;
 });
 
+
 $app->run();
+function erroresGeneralesServicios(AIServiceException $serviceExcepcion): string
+{
+    if ($serviceExcepcion->isQuota()) return 'Limite de cuota Alcanzada';
+    if ($serviceExcepcion->isRateLimit()) return 'Limite de peticiones alcanzado';
+    if ($serviceExcepcion->isAuth()) return 'Error de autenticación';
+    if ($serviceExcepcion->isModelNotFound()) return 'Modelo no disponible';
+
+    return 'unknown';
+}
