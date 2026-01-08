@@ -7,6 +7,7 @@ namespace App\Services;
 use App\Modelos\IAService;
 use App\Modelos\ChatMessage;
 use App\Modelos\Role;
+use App\Excepciones\AIServiceException;
 
 use RuntimeException;
 use InvalidArgumentException;
@@ -38,10 +39,12 @@ final class OpenAIService implements IAService
         $this->apiKey = $apiKey;
         $this->baseUrl = rtrim($baseUrl, '/');
 
+
         // Si no pasas modelo, coge env o un default razonable
 
-        //$this->model = $model ?? ($_ENV['OPENAI_MODEL'] ?? 'gpt-3.5-turbo');
-        $this->model = $model ?? ($_ENV['OPENAI_MODEL'] ?? 'gpt-4.1-nano');
+        $this->model = $model ?? ($_ENV['OPENAI_MODEL'] ?? 'gpt-3.5-turbo');
+        //$this->model = $model ?? ($_ENV['OPENAI_MODEL'] ?? 'gpt-4.1-mini4');
+        //$this->model = $model ?? ($_ENV['OPENAI_MODEL'] ?? 'gpt-5.2');
 
         $this->temperature = $temperature;
         $this->maxOutputTokens = $maxOutputTokens;
@@ -117,6 +120,8 @@ final class OpenAIService implements IAService
 
         $buffer = '';
         $errorBody = '';
+        $streamFailed = false;
+        $streamJson = null;
 
 
         curl_setopt_array($ch, [
@@ -125,7 +130,7 @@ final class OpenAIService implements IAService
             CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE),
             CURLOPT_RETURNTRANSFER => false, // streaming
             CURLOPT_TIMEOUT => 0,
-            CURLOPT_WRITEFUNCTION => function ($ch, string $chunk) use (&$buffer, &$errorBody, $onDelta): int {
+            CURLOPT_WRITEFUNCTION => function ($ch, string $chunk) use (&$buffer, &$errorBody, $onDelta, &$streamFailed, &$streamErrorJson): int {
                 $buffer .= $chunk;
 
                 // Parseamos por líneas, y procesamos SOLO las que empiezan con "data:"
@@ -136,6 +141,7 @@ final class OpenAIService implements IAService
                     if ($line === '' || !str_starts_with($line, 'data:')) {
                         continue;
                     }
+
                     if (!str_contains($chunk, 'data:')) {
                         if (strlen($errorBody) < 16000) {
                             $errorBody .= $chunk;
@@ -161,6 +167,14 @@ final class OpenAIService implements IAService
                     // { "type": "response.output_text.delta", "delta": "..." }
                     $type = (string)($json['type'] ?? '');
 
+
+                    if ($type === 'response.failed') {
+                        $streamFailed = true;
+                        $streamErrorJson = $json;
+                        continue;
+                    }
+
+
                     if ($type === 'response.output_text.delta') {
                         $delta = (string)($json['delta'] ?? '');
                         if ($delta !== '') {
@@ -177,12 +191,6 @@ final class OpenAIService implements IAService
                         }
                         continue;
                     }
-                    //print_r($json);
-
-
-                    // Si quieres, aquí podrías detectar response.failed y lanzar excepción
-                    // (lo dejo suave para no romper streams).
-
                 }
 
                 return strlen($chunk);
@@ -198,6 +206,57 @@ final class OpenAIService implements IAService
 
         $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
+
+        // Manejo de errores Responses API en streaming
+        //─────────────────────────────
+        // Si el stream ha fallado, el JSON de error está en $streamErrorJson
+        //es la manera de capturarlo y lanzarlo como excepción adecuada 
+        //para que no rompa el flujo general.
+
+        /*
+        Que sucedía? La petición streaming devolvía un error (por ejemplo, cuota insuficiente)
+        pero como el flujo era streaming, no se capturaba bien el error HTTP,
+        y el cliente no podía manejarlo correctamente.
+             * ─────────────────────────────
+             * ERRORES RESPONSES API
+             * ─────────────────────────────
+             * Ejemplo real:
+             [type] => response.failed
+                [response] => Array
+                (
+                    [id] => resp_03715dbcc690f53501695fca88c5bc81a1b693c273831ccb64
+                    [object] => response
+                    [created_at] => 1767885448
+                    [status] => failed
+                    [background] => 
+                    [completed_at] => 
+                    [error] => Array
+                        (
+                            [code] => insufficient_quota
+                            [message] => You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors.
+                    )
+
+                     
+
+        */
+        if ($streamFailed && is_array($streamErrorJson)) {
+
+            $err = $streamErrorJson ?? [];
+            $response = $err['response'] ?? [];
+
+            $message = (string)($response['error']['message'] ?? 'Error desconocido en streaming');
+            $type    = isset($err['type']) ? (string)$err['type'] : null;
+            $code    = isset($response['error']['code']) ? (string)$response['error']['code'] : null;
+
+            throw new AIServiceException(
+                $this->name(),
+                $http > 0 ? $http : 500,
+                $code,
+                $type,
+                $message
+            );
+        }
+
 
         if ($http >= 400) {
             throw new RuntimeException("HTTP error en streaming: {$http}");
@@ -236,5 +295,38 @@ final class OpenAIService implements IAService
         }
 
         return $normalized;
+    }
+
+    private function openaiListModels(string $apiKey): array
+    {
+        $ch = curl_init('https://api.openai.com/v1/models');
+
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => [
+                'Authorization: Bearer ' . $apiKey,
+                'Content-Type: application/json',
+            ],
+            CURLOPT_TIMEOUT => 10,
+        ]);
+
+        $response = curl_exec($ch);
+
+        if ($response === false) {
+            throw new RuntimeException('Error cURL: ' . curl_error($ch));
+        }
+
+        $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($status !== 200) {
+            throw new RuntimeException("OpenAI /models failed with HTTP $status: $response");
+        }
+
+        $json = json_decode($response, true);
+
+        print_r($json);
+
+        return $json['data'] ?? [];
     }
 }
