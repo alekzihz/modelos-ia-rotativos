@@ -186,7 +186,6 @@ final class GroqService implements IAService
 
         $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
-        echo $http;
 
         if ($http >= 400) {
             throw new RuntimeException("HTTP error en streaming: {$http}");
