@@ -170,6 +170,7 @@ final class GroqService implements IAService
                     $delta = $json['choices'][0]['delta']['content'] ?? '';
                     if ($delta !== '') {
                         $onDelta($delta);
+                        continue;
                     }
                 }
 

@@ -169,6 +169,7 @@ final class CerebrasService implements IAService
                     $delta = $json['choices'][0]['delta']['content'] ?? '';
                     if ($delta !== '') {
                         $onDelta($delta);
+                        continue;
                     }
                 }
 
