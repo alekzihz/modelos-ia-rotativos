@@ -172,6 +172,7 @@ final class GroqService implements IAService
                         $onDelta($delta);
                         continue;
                     }
+                    continue;
                 }
 
                 return strlen($chunk);

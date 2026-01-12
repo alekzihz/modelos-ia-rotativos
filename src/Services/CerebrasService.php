@@ -171,6 +171,7 @@ final class CerebrasService implements IAService
                         $onDelta($delta);
                         continue;
                     }
+                    continue;
                 }
 
                 return strlen($chunk);
